@@ -2,6 +2,7 @@
 from io import BytesIO
 from typing import Tuple, Literal, Union
 from PIL import Image
+import os
 
 Align = Literal["left", "center", "right"]
 VAlign = Literal["top", "middle", "bottom"]
@@ -16,6 +17,7 @@ def paste_image_auto(
     padding: int = 0,
     allow_upscale: bool = False,
     keep_alpha: bool = True,
+    image_overlay: Union[str, Image.Image,None]=None,
 ) -> bytes:
     """
     在指定矩形内放置一张图片（content_image），按比例缩放至“最大但不超过”该矩形。
@@ -36,7 +38,13 @@ def paste_image_auto(
         img = image_source.copy()
     else:
         img = Image.open(image_source).convert("RGBA")
-        
+
+    if image_overlay is not None:
+        if isinstance(image_overlay, Image.Image):
+            img_overlay = image_overlay.copy()
+        else:
+            img_overlay = Image.open(image_overlay).convert("RGBA") if os.path.isfile(image_overlay) else None
+
     x1, y1 = top_left
     x2, y2 = bottom_right
     if not (x2 > x1 and y2 > y1):
@@ -86,6 +94,12 @@ def paste_image_auto(
     else:
         # 没有 alpha 就直接粘贴（会覆盖底图该区域）
         img.paste(resized, (px, py))
+
+    # 覆盖置顶图层（如果有）
+    if image_overlay is not None and img_overlay is not None:
+        img.paste(img_overlay, (0, 0), img_overlay)
+    elif image_overlay is not None and img_overlay is None:
+        print("Warning: overlay image is not exist.")
 
     # 输出 PNG bytes
     buf = BytesIO()

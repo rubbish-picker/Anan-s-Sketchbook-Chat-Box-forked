@@ -6,7 +6,7 @@ import io
 from PIL import Image
 import win32clipboard
 
-from config import DELAY, FONT_FILE, BASEIMAGE_FILE, AUTO_SEND_IMAGE, AUTO_PASTE_IMAGE, BLOCK_HOTKEY, HOTKEY, SEND_HOTKEY,PASTE_HOTKEY,CUT_HOTKEY,SELECT_ALL_HOTKEY,TEXT_BOX_TOPLEFT,IMAGE_BOX_BOTTOMRIGHT
+from config import DELAY, FONT_FILE, BASEIMAGE_FILE, AUTO_SEND_IMAGE, AUTO_PASTE_IMAGE, BLOCK_HOTKEY, HOTKEY, SEND_HOTKEY,PASTE_HOTKEY,CUT_HOTKEY,SELECT_ALL_HOTKEY,TEXT_BOX_TOPLEFT,IMAGE_BOX_BOTTOMRIGHT,BASE_OVERLAY_FILE,USE_BASE_OVERLAY
 
 from text_fit_draw import draw_text_auto
 from image_fit_paste import paste_image_auto
@@ -88,30 +88,40 @@ def Start():
     if image is not None:
         print("Get image")
 
-        png_bytes = paste_image_auto(
-                    image_source=BASEIMAGE_FILE,
-                    top_left=TEXT_BOX_TOPLEFT,
-                    bottom_right=IMAGE_BOX_BOTTOMRIGHT,
-                    content_image=image,
-                    align="center",
-                    valign="middle",
-                    padding=12,
-                    allow_upscale=True, 
-                    keep_alpha=True,      # 使用内容图 alpha 作为蒙版
-                    )
+        try:
+            png_bytes = paste_image_auto(
+                image_source=BASEIMAGE_FILE,
+                image_overlay= BASE_OVERLAY_FILE if USE_BASE_OVERLAY else None,
+                top_left=TEXT_BOX_TOPLEFT,
+                bottom_right=IMAGE_BOX_BOTTOMRIGHT,
+                content_image=image,
+                align="center",
+                valign="middle",
+                padding=12,
+                allow_upscale=True, 
+                keep_alpha=True,      # 使用内容图 alpha 作为蒙版
+                )
+        except Exception as e:
+            print("Generate image failed:", e)
+            return
     
     elif text != "":
         print("Get text: "+text)
 
-        png_bytes = draw_text_auto(
-                    image_source=BASEIMAGE_FILE,
-                    top_left=TEXT_BOX_TOPLEFT,
-                    bottom_right=IMAGE_BOX_BOTTOMRIGHT,
-                    text=text,
-                    color=(0, 0, 0),
-                    max_font_height=64,        # 例如限制最大字号高度为 64 像素
-                    font_path=FONT_FILE,
-                    )
+        try:
+            png_bytes = draw_text_auto(
+                image_source=BASEIMAGE_FILE,
+                image_overlay= BASE_OVERLAY_FILE if USE_BASE_OVERLAY else None,
+                top_left=TEXT_BOX_TOPLEFT,
+                bottom_right=IMAGE_BOX_BOTTOMRIGHT,
+                text=text,
+                color=(0, 0, 0),
+                max_font_height=64,        # 例如限制最大字号高度为 64 像素
+                font_path=FONT_FILE,
+                )
+        except Exception as e:
+            print("Generate image failed:", e)
+            return
         
     if png_bytes is None:
         print("Generate image failed!")
@@ -126,6 +136,9 @@ def Start():
 
         if AUTO_SEND_IMAGE:
             keyboard.send(SEND_HOTKEY)
+
+    
+    print("Generate image successed!")
 
 
     

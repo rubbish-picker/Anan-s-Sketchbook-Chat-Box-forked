@@ -19,6 +19,7 @@ def draw_text_auto(
     valign: VAlign = "middle",
     line_spacing: float = 0.15,
     bracket_color: Tuple[int, int, int] = (128, 0, 128),  # 中括号及内部内容颜色
+    image_overlay: Union[str, Image.Image,None]=None,
 ) -> bytes:
     """
     在指定矩形内自适应字号绘制文本；
@@ -31,6 +32,12 @@ def draw_text_auto(
     else:
         img = Image.open(image_source).convert("RGBA")
     draw = ImageDraw.Draw(img)
+
+    if image_overlay is not None:
+        if isinstance(image_overlay, Image.Image):
+            img_overlay = image_overlay.copy()
+        else:
+            img_overlay = Image.open(image_overlay).convert("RGBA") if os.path.isfile(image_overlay) else None
 
     x1, y1 = top_left
     x2, y2 = bottom_right
@@ -173,6 +180,12 @@ def draw_text_auto(
         y += best_line_h
         if y - y_start > region_h:
             break
+
+    # 覆盖置顶图层（如果有）
+    if image_overlay is not None and img_overlay is not None:
+        img.paste(img_overlay, (0, 0), img_overlay)
+    elif image_overlay is not None and img_overlay is None:
+        print("Warning: overlay image is not exist.")
 
     # --- 9. 输出 PNG ---
     buf = BytesIO()
