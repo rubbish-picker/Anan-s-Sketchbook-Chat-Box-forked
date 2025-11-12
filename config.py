@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-
+from typing import Tuple, List, Dict
 # 本文件中包含了各种参数, 可以进行调整
 # 其中以"#"开头的注释为说明该参数的使用方法
 
@@ -98,11 +98,22 @@ AUTO_SEND_IMAGE = True
 # 此值为字符串
 LOGGING_LEVEL = "INFO"
 
+# 表情切换快捷键映射，使用alt+数字键切换对应的表情
+# key为热键组合，value为对应的表情标签
+EMOTION_SWITCH_HOTKEYS = {
+    "alt+1": "#普通#",
+    "alt+2": "#开心#",
+    "alt+3": "#生气#",
+    "alt+4": "#无语#",
+    "alt+5": "#脸红#",
+    "alt+6": "#病娇#",
+}
+
 
 class Config(BaseModel):
     hotkey: str = HOTKEY
     """全局热键, 用于 keyboard 库"""
-    allowed_processes: list[str] = ALLOWED_PROCESSES
+    allowed_processes: List[str] = ALLOWED_PROCESSES
     """允许的进程列表"""
     select_all_hotkey: str = SELECT_ALL_HOTKEY
     """全选快捷键"""
@@ -118,13 +129,13 @@ class Config(BaseModel):
     """操作延时（秒）"""
     font_file: str = FONT_FILE
     """字体文件路径"""
-    baseimage_mapping: dict[str, str] = BASEIMAGE_MAPPING
+    baseimage_mapping: Dict[str, str] = BASEIMAGE_MAPPING
     """差分表情映射字典"""
     baseimage_file: str = BASEIMAGE_FILE
     """默认底图文件路径"""
-    text_box_topleft: tuple[int, int] = TEXT_BOX_TOPLEFT
+    text_box_topleft: Tuple[int, int] = TEXT_BOX_TOPLEFT
     """文本框左上角坐标"""
-    image_box_bottomright: tuple[int, int] = IMAGE_BOX_BOTTOMRIGHT
+    image_box_bottomright: Tuple[int, int] = IMAGE_BOX_BOTTOMRIGHT
     """文本框右下角坐标"""
     base_overlay_file: str = BASE_OVERLAY_FILE
     """底图置顶图层文件路径"""
@@ -136,3 +147,5 @@ class Config(BaseModel):
     """是否自动发送图片"""
     logging_level: str = LOGGING_LEVEL
     """日志记录等级"""
+    emotion_switch_hotkeys: dict = EMOTION_SWITCH_HOTKEYS
+    """表情切换快捷键映射"""

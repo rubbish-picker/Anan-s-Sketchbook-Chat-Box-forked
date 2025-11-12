@@ -12,18 +12,41 @@ import win32gui
 import win32process
 from PIL import Image
 
-from config import Config
+from config_loader import load_config
 from image_fit_paste import paste_image_auto
 from text_fit_draw import draw_text_auto
 
-config = Config()
+config = load_config()
 
 logging.basicConfig(
     level=getattr(logging, config.logging_level.upper(), logging.INFO),
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-last_used_image_file = config.baseimage_file
+# 当前使用的表情索引
+current_emotion = "#普通#"
+last_used_image_file = config.baseimage_mapping[current_emotion]
+ratio = 1
+
+# 注册表情切换快捷键
+def register_emotion_switch_hotkeys():
+    """注册表情切换快捷键"""
+    def switch_emotion(emotion_tag):
+        global current_emotion, last_used_image_file
+        current_emotion = emotion_tag
+        last_used_image_file = config.baseimage_mapping.get(emotion_tag, config.baseimage_file)
+        logging.info(f"已切换到表情: {emotion_tag} ({last_used_image_file})")
+    
+    for hotkey, emotion_tag in config.emotion_switch_hotkeys.items():
+        # 为每个表情快捷键绑定切换函数
+        keyboard.add_hotkey(hotkey, switch_emotion, args=(emotion_tag,), suppress=False)
+
+
+def is_vertical_image(image: Image.Image) -> bool:
+    """
+    判断图像是否为竖图
+    """
+    return image.height * ratio > image.width
 
 
 def get_foreground_window_process_name() -> Optional[str]:
@@ -123,6 +146,155 @@ def try_get_image() -> Optional[Image.Image]:
     return image
 
 
+def process_text_and_image(text: str, image: Optional[Image.Image]) -> Optional[bytes]:
+    """
+    同时处理文本和图像内容，将其绘制到同一张图片上
+    """
+    if text == "" and image is None:
+        return None
+
+    # 获取配置的区域坐标
+    x1, y1 = config.text_box_topleft
+    x2, y2 = config.image_box_bottomright
+    region_width = x2 - x1
+    region_height = y2 - y1
+
+    # 只有图像的情况
+    if text == "" and image is not None:
+        logging.info("从剪切板中捕获了图片内容")
+        try:
+            return paste_image_auto(
+                image_source=last_used_image_file,
+                image_overlay=(
+                    config.base_overlay_file if config.use_base_overlay else None
+                ),
+                top_left=(x1, y1),
+                bottom_right=(x2, y2),
+                content_image=image,
+                align="center",
+                valign="middle",
+                padding=12,
+                allow_upscale=True,
+                keep_alpha=True,
+            )
+        except Exception as e:
+            logging.error("生成图片失败: %s", e)
+            return None
+
+    # 只有文本的情况
+    elif text != "" and image is None:
+        logging.info("从文本生成图片: " + text)
+        try:
+            return draw_text_auto(
+                image_source=last_used_image_file,
+                image_overlay=(
+                    config.base_overlay_file if config.use_base_overlay else None
+                ),
+                top_left=(x1, y1),
+                bottom_right=(x2, y2),
+                text=text,
+                color=(0, 0, 0),
+                max_font_height=64,
+                font_path=config.font_file,
+            )
+        except Exception as e:
+            logging.error("生成图片失败: %s", e)
+            return None
+
+    # 同时有图像和文本的情况
+    else:
+        logging.info("同时处理文本和图片内容")
+        logging.info("文本内容: " + text)
+        get_ratio(x1, y1, x2, y2)
+        try:
+            # 根据图像方向决定排布方式
+            if is_vertical_image(image):
+                logging.info("使用左右排布（竖图）")
+                # 左右排布：图像在左，文本在右
+                # 计算左右区域宽度（各占一半，留出间距）
+                spacing = 10  # 左右区域之间的间距
+                left_width = region_width // 2 - spacing // 2
+                right_width = region_width - left_width - spacing
+                
+                # 左区域（图像）
+                left_region_right = x1 + left_width
+                # 右区域（文本）
+                right_region_left = left_region_right + spacing
+                
+                # 先绘制左半部分的图像
+                intermediate_bytes = paste_image_auto(
+                    image_source=last_used_image_file,
+                    image_overlay=None,  # 暂时不应用overlay
+                    top_left=(x1, y1),
+                    bottom_right=(left_region_right, y2),
+                    content_image=image,
+                    align="center",
+                    valign="middle",
+                    padding=12,
+                    allow_upscale=True, 
+                    keep_alpha=True,
+                )
+                
+                # 在已有图像基础上添加右半部分的文本
+                final_bytes = draw_text_auto(
+                    image_source=io.BytesIO(intermediate_bytes),
+                    image_overlay=config.base_overlay_file if config.use_base_overlay else None,
+                    top_left=(right_region_left, y1),
+                    bottom_right=(x2, y2),
+                    text=text,
+                    color=(0, 0, 0),
+                    max_font_height=64,
+                    font_path=config.font_file,
+                )
+            else:
+                logging.info("使用上下排布（横图）")
+                # 上下排布：图像在上，文本在下
+                # 动态计算图像和文本的区域分配
+                # 根据文本长度和图像尺寸计算合适的比例
+                
+                # 估算文本所需高度（使用最大字体高度的一半作为初始估算）
+                estimated_text_height = min(region_height // 2, 100)
+                
+                # 图像区域（上半部分）
+                image_region_bottom = y1 + (region_height - estimated_text_height)
+                
+                # 文本区域（下半部分）
+                text_region_top = image_region_bottom
+                text_region_bottom = y2
+                
+                # 先绘制图像
+                intermediate_bytes = paste_image_auto(
+                    image_source=last_used_image_file,
+                    image_overlay=None,  # 暂时不应用overlay
+                    top_left=(x1, y1),
+                    bottom_right=(x2, image_region_bottom),
+                    content_image=image,
+                    align="center",
+                    valign="middle",
+                    padding=12,
+                    allow_upscale=True, 
+                    keep_alpha=True,
+                )
+                
+                # 在已有图像基础上添加文本
+                final_bytes = draw_text_auto(
+                    image_source=io.BytesIO(intermediate_bytes),
+                    image_overlay=config.base_overlay_file if config.use_base_overlay else None,
+                    top_left=(x1, text_region_top),
+                    bottom_right=(x2, text_region_bottom),
+                    text=text,
+                    color=(0, 0, 0),
+                    max_font_height=64,
+                    font_path=config.font_file,
+                )
+            
+            return final_bytes
+            
+        except Exception as e:
+            logging.error("生成图片失败: %s", e)
+            return None
+
+
 def generate_image():
     """
     生成图像的主函数
@@ -154,60 +326,16 @@ def generate_image():
 
     logging.info("开始尝试生成图片...")
 
-    png_bytes = None
+    # 查找发送内容是否包含更换差分指令 #差分名#, 如果有则更换差分并移除关键字
+    for keyword, img_file in config.baseimage_mapping.items():
+        if keyword not in user_input:
+            continue
+        last_used_image_file = img_file
+        user_input = user_input.replace(keyword, "").strip()
+        logging.info(f"检测到关键词 '{keyword}'，使用底图: {last_used_image_file}")
+        break
 
-    # 优先处理图片输入
-    if user_pasted_image is not None:
-        logging.info("从剪切板中捕获了图片内容")
-
-        try:
-            png_bytes = paste_image_auto(
-                image_source=last_used_image_file,
-                image_overlay=(
-                    config.base_overlay_file if config.use_base_overlay else None
-                ),
-                top_left=config.text_box_topleft,
-                bottom_right=config.image_box_bottomright,
-                content_image=user_pasted_image,
-                align="center",
-                valign="middle",
-                padding=12,
-                allow_upscale=True,
-                keep_alpha=True,  # 使用内容图 alpha 作为蒙版
-            )
-        except Exception as e:
-            logging.error("生成图片失败: %s", e)
-            return
-
-    # 其次处理文本输入
-    elif user_input != "":
-        logging.info("从文本生成图片: " + user_input)
-
-        # 查找发送内容是否包含更换差分指令 #差分名#, 如果有则更换差分并移除关键字
-        for keyword, img_file in config.baseimage_mapping.items():
-            if keyword not in user_input:
-                continue
-            last_used_image_file = img_file
-            user_input = user_input.replace(keyword, "").strip()
-            logging.info(f"检测到关键词 '{keyword}'，使用底图: {last_used_image_file}")
-            break
-
-        try:
-            png_bytes = draw_text_auto(
-                image_source=last_used_image_file,
-                image_overlay=(
-                    config.base_overlay_file if config.use_base_overlay else None
-                ),
-                top_left=config.text_box_topleft,
-                bottom_right=config.image_box_bottomright,
-                text=user_input,
-                color=(0, 0, 0),
-                max_font_height=64,
-                font_path=config.font_file,
-            )
-        except Exception as e:
-            logging.error("生成图片失败: %s", e)
-            return
+    png_bytes = process_text_and_image(user_input, user_pasted_image)
 
     if png_bytes is None:
         logging.error("生成图片失败！未生成 PNG 字节。")
@@ -228,6 +356,13 @@ def generate_image():
 
     logging.info("成功地生成并发送图片！")
 
+def get_ratio(x1, y1, x2, y2):
+    try:
+        global ratio
+        ratio = (x2 - x1) / (y2 - y1)
+        logging.info("比例: %s", ratio)
+    except Exception as e:
+        logging.error("计算比例时出错: %s", e)
 
 # 绑定 Ctrl+Alt+H 作为全局热键
 is_hotkey_bound = keyboard.add_hotkey(
@@ -239,6 +374,10 @@ is_hotkey_bound = keyboard.add_hotkey(
 logging.info("热键绑定: " + str(bool(is_hotkey_bound)))
 logging.info("允许的进程: " + str(config.allowed_processes))
 logging.info("键盘监听已启动，按下 {} 以生成图片".format(config.hotkey))
+
+# 注册表情切换快捷键
+register_emotion_switch_hotkeys()
+logging.info("表情切换快捷键已注册: " + str(config.emotion_switch_hotkeys))
 
 # 保持程序运行
 try:
