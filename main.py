@@ -39,7 +39,7 @@ def register_emotion_switch_hotkeys():
     
     for hotkey, emotion_tag in config.emotion_switch_hotkeys.items():
         # 为每个表情快捷键绑定切换函数
-        keyboard.add_hotkey(hotkey, switch_emotion, args=(emotion_tag,), suppress=False)
+        keyboard.add_hotkey(hotkey, switch_emotion, args=(emotion_tag,), suppress=True)
 
 
 def is_vertical_image(image: Image.Image) -> bool:
