@@ -120,7 +120,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return TextSpan(children: children);
   }
 
-  Future<void> _generateAndShare() async {
+  Future<void> _generateImage() async {
     if (_textController.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -223,16 +223,6 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           _generatedImageBytes = pngBytes;
         });
-
-        // 保存到临时文件并分享
-        final tempDir = await getTemporaryDirectory();
-        final file = await File(
-          '${tempDir.path}/sketchbook_share.png',
-        ).create();
-        await file.writeAsBytes(pngBytes);
-
-        // 分享
-        await Share.shareXFiles([XFile(file.path)], text: 'Anan Sketchbook');
       }
     } catch (e) {
       print(e);
@@ -246,6 +236,28 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           _isGenerating = false;
         });
+      }
+    }
+  }
+
+  Future<void> _shareImage() async {
+    if (_generatedImageBytes == null) return;
+
+    try {
+      // 保存到临时文件并分享
+      final tempDir = await getTemporaryDirectory();
+      final file = await File(
+        '${tempDir.path}/sketchbook_share.png',
+      ).create();
+      await file.writeAsBytes(_generatedImageBytes!);
+
+      // 分享
+      await Share.shareXFiles([XFile(file.path)], text: 'Anan Sketchbook');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('分享失败: $e')));
       }
     }
   }
@@ -321,19 +333,37 @@ class _MyHomePageState extends State<MyHomePage> {
             const SizedBox(height: 20),
 
             // 生成按钮
-            ElevatedButton.icon(
-              onPressed: _isGenerating ? null : _generateAndShare,
-              icon: _isGenerating
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
-              label: Text(_isGenerating ? '生成中...' : '生成并分享'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isGenerating ? null : _generateImage,
+                    icon: _isGenerating
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.image),
+                    label: Text(_isGenerating ? '生成中...' : '生成图片'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _generatedImageBytes == null ? null : _shareImage,
+                    icon: const Icon(Icons.share),
+                    label: const Text('分享图片'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
