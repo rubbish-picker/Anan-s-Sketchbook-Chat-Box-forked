@@ -1,7 +1,8 @@
 # 分支描述
 - main： fork的主分支，仅进行了bug修复
 - android： android版本源代码
-- Android-PR：PR使用的重新整理了目录的android版本 
+- Android-PR：PR使用的重新整理了目录的android版本
+- 推荐使用Android-PR分支
 # 安安的素描本聊天框
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
